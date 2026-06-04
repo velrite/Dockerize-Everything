@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.env
+.env.*
+*.log
+tests/
+.pytest_cache/
+.git/
+.gitignore
+README.md
+Makefile

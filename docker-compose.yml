@@ -1,0 +1,188 @@
+# Compose file format v3.8 — supports all production features
+# we need: secrets, healthchecks, resource limits, named volumes
+name: dockerize-everything
+ 
+services:
+ 
+  # ── PostgreSQL ─────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine         # alpine = smaller image
+    restart: unless-stopped           # auto-restart on crash/host-reboot
+    environment:
+      POSTGRES_USER:     ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB:       ${POSTGRES_DB}
+    volumes:
+      # Named volume — data persists across container restarts
+      # Anonymous volumes are destroyed when containers are removed — avoid them
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER}", "-d", "${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    # Resource limits — prevent runaway processes from eating your host
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          memory: 256M
+ 
+  # ── Redis ──────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-changeme}
+    volumes:
+      - redis_data:/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+ 
+  # ── Flask API ───────────────────────────────────────────────────────────
+  flask-api:
+    build:
+      context: ./flask-app
+      dockerfile: Dockerfile
+      # Build-time args for non-secret build customization
+      args:
+        - APP_ENV=${FLASK_APP_ENV:-production}
+    image: dockerize-everything/flask-api:latest
+    restart: unless-stopped
+    environment:
+      APP_ENV: ${FLASK_APP_ENV:-production}
+    networks:
+      - frontend
+      - backend
+    # depends_on with condition: service_healthy is critical
+    # Without this, your app starts before the DB is ready and crashes
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+    # Do NOT publish a port unless absolutely necessary
+    # Services talk to each other over Docker networks, not published ports
+    # Only the reverse proxy (nginx/traefik) needs a published port
+ 
+  # ── Node API ────────────────────────────────────────────────────────────
+  node-api:
+    build:
+      context: ./node-app
+      dockerfile: Dockerfile
+    image: dockerize-everything/node-api:latest
+    restart: unless-stopped
+    environment:
+      PORT:        3000
+      DB_HOST:     ${NODE_DB_HOST:-postgres}
+      DB_PORT:     ${NODE_DB_PORT:-5432}
+      DB_NAME:     ${NODE_DB_NAME}
+      DB_USER:     ${NODE_DB_USER}
+      DB_PASSWORD: ${NODE_DB_PASSWORD}
+    networks:
+      - frontend
+      - backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+ 
+  # ── Superset ────────────────────────────────────────────────────────────
+  superset:
+    build:
+      context: ./superset
+      dockerfile: Dockerfile
+    image: dockerize-everything/superset:latest
+    restart: unless-stopped
+    ports:
+      # Superset is the one UI-facing service — expose it
+      - "8088:8088"
+    environment:
+      SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY}
+      DATABASE_URL:        ${DATABASE_URL}
+      REDIS_URL:           ${REDIS_URL}
+    networks:
+      - frontend
+      - backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+ 
+  # ── Superset Worker (Celery) ─────────────────────────────────────────
+  superset-worker:
+    build:
+      context: ./superset
+      dockerfile: Dockerfile
+    image: dockerize-everything/superset:latest
+    restart: unless-stopped
+    # Override CMD to run the Celery worker instead of the web server
+    command: celery --app=superset.tasks.celery_app:app worker --loglevel=info
+    environment:
+      SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY}
+      DATABASE_URL:        ${DATABASE_URL}
+      REDIS_URL:           ${REDIS_URL}
+    networks:
+      - backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 768M
+ 
+# ── Networks ───────────────────────────────────────────────────────────────
+# Separate networks = network segmentation
+# backend services cannot be reached from outside — only through frontend
+# This is basic defense-in-depth
+networks:
+  frontend:
+    driver: bridge
+  backend:
+    driver: bridge
+    # internal: true  ← uncomment to block outbound internet from backend
+ 
+# ── Volumes ────────────────────────────────────────────────────────────────
+# Named volumes persist data even when containers are removed
+# They are managed by Docker and stored in /var/lib/docker/volumes/
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+
+
+
+

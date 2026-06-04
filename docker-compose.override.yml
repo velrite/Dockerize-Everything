@@ -1,0 +1,17 @@
+services:
+  flask-api:
+    volumes:
+      - ./flask-app/app:/app/app
+    environment:
+      APP_ENV: development
+    ports:
+      - "8000:8000"
+    command: flask --app app:create_app run --host 0.0.0.0 --port 8000 --debug
+  node-api:
+    volumes:
+      - ./node-app/src:/app/src
+    ports:
+      - "3000:3000"
+    command: npx nodemon src/index.js
+    environment:
+      NODE_ENV: development
