@@ -61,7 +61,7 @@ services:
       # Build-time args for non-secret build customization
       args:
         - APP_ENV=${FLASK_APP_ENV:-production}
-    image: dockerize-everything/flask-api:latest
+    image: ghcr.io/velrite/flask-api:e68f946b24f99225601f8a74fd11dc9cd7a16ab9
     restart: unless-stopped
     environment:
       APP_ENV: ${FLASK_APP_ENV:-production}
