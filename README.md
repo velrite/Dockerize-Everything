@@ -220,5 +220,5 @@ Olamide Olalekan — Platform & DevSecOps Engineer
 
 ## Related Projects
 
-- [Auto-Healing Kubernetes Platform](https://github.com/velrite/auto-healing-kubernetes-platform)
+- [Auto-Healing Kubernetes Platform](https://github.com/velrite/github.com-velrite-auto-healing-kubernetes-platform)
 - [Terraform Kubernetes Platform](https://github.com/velrite/Terraform-Kubernetes-Platform)
