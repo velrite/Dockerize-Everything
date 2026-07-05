@@ -24,9 +24,7 @@ in modern production environments.
 | Apache Superset | Analytics and visualization platform | 8088 |
 | Celery Worker | Background job processing | — |
 
-
 ---
-
 
 ## Network Design
 
@@ -214,6 +212,9 @@ distinction for reasoning about production resilience — a genuine crash and
 an intentional stop are handled differently by design, and relying on a
 restart policy alone is not sufficient to guarantee recovery from every kind
 of failure.
+
+**Not yet tested:** Node API termination and container rebuild with
+persistent volumes reattached. Planned as a follow-up test pass.
 
 ---
 
