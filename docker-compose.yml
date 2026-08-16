@@ -1,9 +1,9 @@
 # Compose file format v3.8 — supports all production features
 # we need: secrets, healthchecks, resource limits, named volumes
 name: dockerize-everything
- 
+
 services:
- 
+
   # ── PostgreSQL ─────────────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine         # alpine = smaller image
@@ -32,7 +32,7 @@ services:
           memory: 512M
         reservations:
           memory: 256M
- 
+
   # ── Redis ──────────────────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
@@ -52,7 +52,7 @@ services:
         limits:
           cpus: '0.5'
           memory: 256M
- 
+
   # ── Flask API ───────────────────────────────────────────────────────────
   flask-api:
     build:
@@ -81,7 +81,7 @@ services:
     # Do NOT publish a port unless absolutely necessary
     # Services talk to each other over Docker networks, not published ports
     # Only the reverse proxy (nginx/traefik) needs a published port
- 
+
   # ── Node API ────────────────────────────────────────────────────────────
   node-api:
     build:
@@ -107,7 +107,7 @@ services:
         limits:
           cpus: '0.5'
           memory: 256M
- 
+
   # ── Superset ────────────────────────────────────────────────────────────
   superset:
     build:
@@ -135,7 +135,7 @@ services:
         limits:
           cpus: '1.0'
           memory: 1G
- 
+
   # ── Superset Worker (Celery) ─────────────────────────────────────────
   superset-worker:
     build:
@@ -145,6 +145,14 @@ services:
     restart: unless-stopped
     # Override CMD to run the Celery worker instead of the web server
     command: celery --app=superset.tasks.celery_app:app worker --loglevel=info
+    # ✅ FIX: Worker has no web server — healthcheck must use celery inspect ping
+    # The image-level healthcheck (curl :8088) is wrong for this service
+    healthcheck:
+      test: ["CMD-SHELL", "celery --app=superset.tasks.celery_app:app inspect ping | grep -c pong"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+      start_period: 30s
     environment:
       SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY}
       DATABASE_URL:        ${DATABASE_URL}
@@ -161,7 +169,7 @@ services:
         limits:
           cpus: '1.0'
           memory: 768M
- 
+
 # ── Networks ───────────────────────────────────────────────────────────────
 # Separate networks = network segmentation
 # backend services cannot be reached from outside — only through frontend
@@ -172,7 +180,7 @@ networks:
   backend:
     driver: bridge
     # internal: true  ← uncomment to block outbound internet from backend
- 
+
 # ── Volumes ────────────────────────────────────────────────────────────────
 # Named volumes persist data even when containers are removed
 # They are managed by Docker and stored in /var/lib/docker/volumes/
@@ -181,8 +189,3 @@ volumes:
     driver: local
   redis_data:
     driver: local
-
-
-
-
-
